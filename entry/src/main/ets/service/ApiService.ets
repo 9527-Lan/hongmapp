@@ -1,4 +1,4 @@
-import { HttpClient } from '../common/network/HttpClient';
+import { http } from '../common/network/HttpClient';
 import { Logger } from '../common/utils/Logger';
 
 const TAG: string = 'ApiService';

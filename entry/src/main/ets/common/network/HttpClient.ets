@@ -207,3 +207,57 @@ export class HttpClient {
     HttpClient.instance = undefined;
   }
 }
+
+/**
+ * 全局请求门面（推荐使用）
+ * 内部每次调用都委托给 HttpClient.getInstance()，
+ * 因此即使 Session 被 close 后重建，也始终指向最新实例
+ *
+ * 使用示例：
+ *   import { http } from '../common/network/HttpClient';
+ *   const user: UserInfo = await http.get<UserInfo>('/user/1');
+ */
+class Http {
+  /** GET 请求 */
+  public get<T>(path: string): Promise<T> {
+    return HttpClient.getInstance().get<T>(path);
+  }
+
+  /** POST 请求 */
+  public post<T>(path: string, body?: object): Promise<T> {
+    return HttpClient.getInstance().post<T>(path, body);
+  }
+
+  /** PUT 请求 */
+  public put<T>(path: string, body?: object): Promise<T> {
+    return HttpClient.getInstance().put<T>(path, body);
+  }
+
+  /** DELETE 请求 */
+  public delete<T>(path: string): Promise<T> {
+    return HttpClient.getInstance().delete<T>(path);
+  }
+
+  /** GET 请求（自动解包 BaseResponse 并校验业务码） */
+  public getData<T>(path: string): Promise<T> {
+    return HttpClient.getInstance().getData<T>(path);
+  }
+
+  /** POST 请求（自动解包 BaseResponse 并校验业务码） */
+  public postData<T>(path: string, body?: object): Promise<T> {
+    return HttpClient.getInstance().postData<T>(path, body);
+  }
+
+  /** 设置/更新全局请求头 */
+  public setHeader(key: string, value: string): void {
+    HttpClient.getInstance().setHeader(key, value);
+  }
+
+  /** 关闭会话，释放资源（应用退出时调用） */
+  public close(): void {
+    HttpClient.getInstance().close();
+  }
+}
+
+/** 全局唯一的请求门面实例，业务代码直接 import { http } 使用 */
+export const http: Http = new Http();
