@@ -1,9 +1,11 @@
 import { rcp } from '@kit.RemoteCommunicationKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { Logger } from '../utils/Logger';
-import { HttpConfig, HttpStatusCode } from './HttpConfig';
-import { HttpError, HttpMethod } from './HttpModel';
+import { HttpConfig } from './HttpConfig';
+import { BaseResponse, HttpError, HttpMethod } from './HttpModel';
+import { AuthInterceptor } from './AuthInterceptor';
 import { LogInterceptor } from './LogInterceptor';
+import { ResponseInterceptor } from './ResponseInterceptor';
 
 const TAG: string = 'HttpClient';
 
@@ -40,8 +42,15 @@ export class HttpClient {
         'content-type': 'application/json',
         'accept': 'application/json'
       },
-      // 拦截器链：按顺序执行，此处挂载日志拦截器
-      interceptors: [new LogInterceptor()],
+      // 拦截器链：按声明顺序执行请求侧逻辑，响应侧逆序返回
+      // 1. AuthInterceptor（最前）：注入 Token / 请求 ID 等公共请求头
+      // 2. LogInterceptor：打印含公共头在内的完整请求与响应日志
+      // 3. ResponseInterceptor（最后）：统一处理 401 与异常状态码
+      interceptors: [
+        new AuthInterceptor(),
+        new LogInterceptor(),
+        new ResponseInterceptor()
+      ],
       // 请求配置：超时时间等
       requestConfiguration: {
         transfer: {
@@ -114,6 +123,44 @@ export class HttpClient {
   }
 
   /**
+   * GET 请求（自动解包 BaseResponse 业务结构）
+   * 适用于后端返回 { code, message, data } 统一包装结构的接口，
+   * 内部完成业务码校验：code 非成功值时抛出 HttpError
+   * @param path 接口路径
+   * @returns 解包后的业务数据 data
+   */
+  public async getData<T>(path: string): Promise<T> {
+    const resp: BaseResponse<T> = await this.request<BaseResponse<T>>(HttpMethod.GET, path);
+    return HttpClient.unwrap(resp, path);
+  }
+
+  /**
+   * POST 请求（自动解包 BaseResponse 业务结构）
+   * @param path 接口路径
+   * @param body 请求体对象
+   * @returns 解包后的业务数据 data
+   */
+  public async postData<T>(path: string, body?: object): Promise<T> {
+    const resp: BaseResponse<T> = await this.request<BaseResponse<T>>(HttpMethod.POST, path, body);
+    return HttpClient.unwrap(resp, path);
+  }
+
+  /**
+   * 统一业务码校验与解包
+   * 业务码非成功值时打印错误日志并抛出 HttpError（携带后端 message）
+   * @param resp 后端统一包装的响应结构
+   * @param path 接口路径（仅用于日志）
+   */
+  private static unwrap<T>(resp: BaseResponse<T>, path: string): T {
+    if (resp.code !== HttpConfig.BIZ_SUCCESS_CODE) {
+      Logger.error(TAG, '业务码异常: %{public}d, msg: %{public}s, path: %{public}s',
+        resp.code, resp.message ?? '', path);
+      throw new HttpError(resp.code, resp.message ?? '业务处理失败');
+    }
+    return resp.data;
+  }
+
+  /**
    * 通用请求方法（核心逻辑）
    * 流程：构建请求 -> 发起请求 -> 校验 HTTP 状态码 -> 解析 JSON -> 返回业务数据
    * @param method 请求方法
@@ -126,15 +173,9 @@ export class HttpClient {
       const content: string | undefined = body !== undefined ? JSON.stringify(body) : undefined;
       const request: rcp.Request = new rcp.Request(path, method, undefined, content);
 
-      // 发起请求（日志由 LogInterceptor 统一打印）
+      // 发起请求
+      // 日志由 LogInterceptor 打印，HTTP 状态码异常（含 401）由 ResponseInterceptor 统一处理
       const response: rcp.Response = await this.session.fetch(request);
-
-      // 校验 HTTP 状态码，非 2xx 视为失败
-      if (response.statusCode < HttpStatusCode.OK || response.statusCode >= 300) {
-        Logger.error(TAG, 'HTTP 状态码异常: %{public}d, path: %{public}s',
-          response.statusCode, path);
-        throw new HttpError(response.statusCode, `HTTP 错误: ${response.statusCode}`);
-      }
 
       // 解析响应体为 JSON
       const result: T | null = response.toJSON() as T | null;

@@ -20,10 +20,13 @@
 │       │   │   └── EntryAbility.ets
 │       │   ├── common/
 │       │   │   ├── network/         # 网络请求封装层
-│       │   │   │   ├── HttpClient.ets     # RCP 封装核心（单例 Session）
-│       │   │   │   ├── HttpConfig.ets     # BaseURL / 超时等全局配置
-│       │   │   │   ├── HttpModel.ets      # 响应模型与统一错误 HttpError
-│       │   │   │   └── LogInterceptor.ets # 请求/响应日志拦截器
+│       │   │   │   ├── HttpClient.ets          # RCP 封装核心（单例 Session）
+│       │   │   │   ├── HttpConfig.ets          # BaseURL / 超时等全局配置
+│       │   │   │   ├── HttpModel.ets           # 响应模型与统一错误 HttpError
+│       │   │   │   ├── AuthInterceptor.ets     # 请求拦截器（注入 Token / 请求 ID）
+│       │   │   │   ├── LogInterceptor.ets      # 请求/响应日志拦截器
+│       │   │   │   ├── ResponseInterceptor.ets # 响应拦截器（401 / 状态码统一处理）
+│       │   │   │   └── TokenManager.ets        # Token 管理与登录失效事件分发
 │       │   │   └── utils/
 │       │   │       └── Logger.ets   # hilog 日志工具类
 │       │   ├── service/
@@ -62,10 +65,38 @@ try {
 }
 ```
 
-### 登录后写入 Token
+### 统一请求拦截
+
+Session 上挂载了三级拦截器链，按顺序执行：
+
+1. `AuthInterceptor`（请求拦截）：自动注入 `Authorization`、`x-request-id`、`x-timestamp` 公共请求头
+2. `LogInterceptor`（日志拦截）：打印请求方法、URL、请求头、状态码、耗时全链路日志
+3. `ResponseInterceptor`（响应拦截）：非 2xx 状态码统一转换为友好中文 `HttpError`；401 自动清除 Token 并分发登录失效事件
+
+### Token 管理与登录失效处理
 
 ```ts
-HttpClient.getInstance().setHeader('authorization', `Bearer ${token}`);
+import { TokenManager } from '../common/network/TokenManager';
+
+// 登录成功后保存 Token，后续所有请求自动携带 Authorization 头
+TokenManager.getInstance().setToken(token);
+
+// 注册 401 登录失效回调（如跳转登录页），响应拦截器检测到 401 时自动触发
+TokenManager.getInstance().onUnauthorized(() => {
+  // router.pushUrl({ url: 'pages/Login' })
+});
+
+// 退出登录时清除
+TokenManager.getInstance().clearToken();
+```
+
+### 业务码统一解包
+
+后端返回 `{ code, message, data }` 包装结构时，使用 `getData/postData` 自动校验业务码并解包：
+
+```ts
+// code 非成功值时自动抛出携带后端 message 的 HttpError
+const user: UserInfo = await HttpClient.getInstance().getData<UserInfo>('/user/profile');
 ```
 
 ### 修改服务端地址
