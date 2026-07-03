@@ -1,0 +1,10 @@
+{
+  // entry 模块依赖配置
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "应用主入口模块",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {}
+}

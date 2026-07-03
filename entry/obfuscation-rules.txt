@@ -1,0 +1,6 @@
+# 混淆规则配置文件
+# 开启混淆后在此配置保留规则
+-enable-property-obfuscation
+-enable-toplevel-obfuscation
+-enable-filename-obfuscation
+-enable-export-obfuscation

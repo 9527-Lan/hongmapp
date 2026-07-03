@@ -1,0 +1,27 @@
+{
+  // entry 模块构建配置
+  "apiType": "stageMode",
+  "buildOption": {},
+  "buildOptionSet": [
+    {
+      "name": "release",
+      "arkOptions": {
+        // release 模式开启混淆
+        "obfuscation": {
+          "ruleOptions": {
+            "enable": false,
+            "files": ["./obfuscation-rules.txt"]
+          }
+        }
+      }
+    }
+  ],
+  "targets": [
+    {
+      "name": "default"
+    },
+    {
+      "name": "ohosTest"
+    }
+  ]
+}
